@@ -1,0 +1,64 @@
+.PHONY: dev build clean install run test
+
+# 開發模式
+dev:
+	@echo "🔄 Starting development servers..."
+	@echo "Frontend will be available at: http://localhost:5173"
+	@echo "Backend will be available at: http://localhost:{{.Port}}"
+	@cd frontend && npm run dev &
+	@sleep 2
+	@go run main.go
+
+# 安裝依賴
+install:
+	@echo "📦 Installing dependencies..."
+	@cd frontend && npm install
+	@go mod tidy
+
+# 構建生產版本
+build:
+	@echo "🏗️  Building frontend..."
+	@cd frontend && npm run build
+	@echo "🏗️  Building backend..."
+	@go build -ldflags="-s -w" -o {{.ProjectName}} main.go
+	@echo "✅ Build complete! Run ./{{.ProjectName}} to start"
+
+# 運行生產版本
+run: build
+	@echo "🚀 Starting {{.ProjectName}}..."
+	@./{{.ProjectName}}
+
+# 測試
+test:
+	@echo "🧪 Running tests..."
+	@go test ./...
+	@cd frontend && npm test
+
+# 清理
+clean:
+	@echo "🧹 Cleaning..."
+	@rm -rf frontend/dist
+	@rm -f {{.ProjectName}}
+	@echo "✅ Clean complete!"
+
+# Docker 構建
+docker-build:
+	@echo "🐳 Building Docker image..."
+	@docker build -t {{.ProjectName}}:latest .
+
+# Docker 運行
+docker-run:
+	@echo "🐳 Running Docker container..."
+	@docker run -p {{.Port}}:{{.Port}} {{.ProjectName}}:latest
+
+# 顯示幫助
+help:
+	@echo "{{.ProjectName}} - Available commands:"
+	@echo "  make install     - Install dependencies"
+	@echo "  make dev         - Start development servers"
+	@echo "  make build       - Build for production"
+	@echo "  make run         - Run production build"
+	@echo "  make test        - Run tests"
+	@echo "  make clean       - Clean build artifacts"
+	@echo "  make docker-build - Build Docker image"
+	@echo "  make docker-run  - Run Docker container"
