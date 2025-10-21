@@ -1,0 +1,144 @@
+# GEMINI.md
+
+This file provides guidance to Gemini and other LLMs when working with code in this repository.
+
+## Project Overview
+
+**{{.ProjectName}}** - A full-stack web application with Go backend and React frontend, generated using the Go React Generator CLI.
+
+**Tech Stack:**
+- **Backend:** Go 1.21+ with embedded static file serving
+- **Frontend:** React 18 + Vite 5 + React Router
+- **Build System:** Make (Unix) / build.bat (Windows)
+
+## Quick Start Commands
+
+```bash
+# Install all dependencies
+make install
+
+# Development mode (separate terminals)
+make frontend-dev   # Frontend dev server (http://localhost:5173)
+make backend-dev    # Backend server (http://localhost:{{.Port}})
+
+# Production build
+make build          # Builds frontend bundle + Go binary
+
+# Run production binary
+./{{.ProjectName}}
+
+# Run tests
+make test
+
+# Clean build artifacts
+make clean
+```
+
+## Architecture
+
+### Backend Structure ([main.go](main.go))
+
+**Embedded Frontend Serving:**
+- Uses `//go:embed dist/*` to embed frontend build into the Go binary
+- Single binary deployment - no separate static file serving needed
+- SPA routing: all non-API routes serve `index.html` for client-side routing
+
+**API Endpoints:**
+- `GET /api/health` - Health check endpoint (returns service status, version)
+- `GET /api/hello` - Example API endpoint (returns greeting message)
+- All routes starting with `/api/` are treated as API routes
+
+**Static File Handling:**
+- Static assets (.js, .css, images, fonts) served directly from embedded FS
+- Non-static routes fall back to `index.html` for React Router
+- CORS headers enabled (`Access-Control-Allow-Origin: *`)
+
+### Frontend Structure ([frontend/](frontend/))
+
+**React + Vite Setup:**
+- Entry point: [src/main.jsx](frontend/src/main.jsx)
+- Main component: [src/App.jsx](frontend/src/App.jsx)
+- Build output: `frontend/dist/` (embedded into Go binary)
+
+**Development vs Production:**
+- **Dev:** Vite dev server runs on port 5173, proxies API calls to backend
+- **Prod:** Frontend built to `dist/`, embedded and served by Go binary
+
+**Testing:**
+- Vitest for unit/component tests
+- ESLint for code quality
+
+## Common Development Tasks
+
+### Adding New API Endpoints
+
+1. Add handler function in [main.go](main.go):
+```go
+func myHandler(w http.ResponseWriter, r *http.Request) {
+    writeJSON(w, http.StatusOK, myResponse{...})
+}
+```
+
+2. Register route in `main()`:
+```go
+http.HandleFunc("/api/myroute", myHandler)
+```
+
+3. API routes must start with `/api/` to be recognized correctly
+
+### Adding Frontend Routes
+
+1. Frontend uses client-side routing (React Router)
+2. All non-API routes automatically serve `index.html`
+3. Add routes in [src/App.jsx](frontend/src/App.jsx)
+
+### Environment Configuration
+
+- Backend port: Set `PORT` environment variable (defaults to {{.Port}})
+- Frontend dev proxy configured in [vite.config.js](frontend/vite.config.js)
+
+## Build and Deployment
+
+**Production Build Process:**
+1. `make frontend-build` - Builds React app to `frontend/dist/`
+2. `make backend-build` - Compiles Go binary with embedded frontend
+3. Result: Single executable `{{.ProjectName}}` containing everything
+
+**Deployment:**
+- Deploy the single `{{.ProjectName}}` binary
+- No need for separate static file server
+- Binary includes all frontend assets via `embed.FS`
+
+## File Naming Conventions
+
+**Template Files:**
+- This project was generated from template files (`.tmpl` extension)
+- Generated files have template variables replaced (e.g., `{{.ProjectName}}`)
+- Do not add `.tmpl` extensions to new files in generated project
+
+## Testing Strategy
+
+**Backend:**
+- Unit tests with Go's testing package: `go test ./...`
+- Test API handlers, business logic
+
+**Frontend:**
+- Component tests with Vitest: `cd frontend && npm test`
+- ESLint for static analysis: `npm run lint`
+
+## Common Issues
+
+**Frontend not updating in production:**
+- Run `make frontend-build` to rebuild the `dist/` folder
+- Run `make backend-build` to re-embed the new frontend assets
+- The Go binary must be rebuilt to pick up new frontend changes
+
+**Port conflicts:**
+- Backend default: {{.Port}}
+- Frontend dev server default: 5173
+- Change via `PORT` env var or edit source files
+
+**SPA routing issues:**
+- Backend automatically serves `index.html` for non-API, non-static routes
+- Ensure routes start with `/api/` for API endpoints
+- Check `isAPIRoute()` and `isStaticFile()` functions in [main.go](main.go)

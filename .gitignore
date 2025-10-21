@@ -1,0 +1,36 @@
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Go build artifacts
+bin/
+coverage/
+*.test
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+/generator
+/generator.exe
+
+# Dependency & cache directories
+vendor/
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Logs & temp files
+*.log
+*.tmp
+*.bak
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+go.sum
+# test folder
+/test/

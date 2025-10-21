@@ -1,0 +1,41 @@
+name: "basic"
+displayName: "Basic Go + React"
+description: "Simple Go HTTP server with React frontend using Vite"
+version: "1.0.0"
+author: "Go React Generator"
+tags: ["go", "react", "vite", "basic"]
+
+variables:
+  - name: "ProjectName"
+    type: "string"
+    required: true
+    description: "Project name"
+  - name: "ModuleName"
+    type: "string"
+    required: true
+    description: "Go module name"
+  - name: "Port"
+    type: "string"
+    default: "8080"
+    description: "Server port"
+
+files:
+  - source: "backend/"
+    target: "."
+    type: "directory"
+  - source: "frontend/"
+    target: "frontend/"
+    type: "directory"
+  - source: "GEMINI.md.tmpl"
+    target: "GEMINI.md"
+    type: "file"
+
+postGenerate:
+  - command: "git init"
+    workDir: "."
+  - command: "go mod init {{.ModuleName}}"
+    workDir: "."
+  - command: "go mod tidy"
+    workDir: "."
+  - command: "npm install"
+    workDir: "frontend"

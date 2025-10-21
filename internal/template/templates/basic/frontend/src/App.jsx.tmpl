@@ -1,0 +1,25 @@
+import './App.css'
+
+function App() {
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Welcome to {{.ProjectName}}</h1>
+        <p>
+          This project ships with a Go backend and a React frontend. Start coding by editing
+          <code> frontend/src/App.jsx</code> and <code> main.go</code>.
+        </p>
+        <div className="App-links">
+          <a href="http://localhost:{{.Port}}" target="_blank" rel="noreferrer">
+            Backend (Go)
+          </a>
+          <a href="http://localhost:5173" target="_blank" rel="noreferrer">
+            Frontend Dev Server
+          </a>
+        </div>
+      </header>
+    </div>
+  )
+}
+
+export default App

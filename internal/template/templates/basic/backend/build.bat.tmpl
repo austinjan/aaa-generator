@@ -1,0 +1,29 @@
+@echo off
+setlocal
+
+set BIN={{.ProjectName}}
+
+echo Installing frontend dependencies...
+call npm install --prefix frontend
+if errorlevel 1 goto :error
+
+echo Building frontend assets...
+call npm run build --prefix frontend
+if errorlevel 1 goto :error
+
+echo Tidying Go modules...
+go mod tidy
+if errorlevel 1 goto :error
+
+echo Building backend binary...
+go build -trimpath -ldflags="-s -w" -o %BIN% main.go
+if errorlevel 1 goto :error
+
+echo:
+echo Build complete. Run %BIN% to start the backend server.
+goto :eof
+
+:error
+echo:
+echo Build failed. See the output above for details.
+exit /b 1
