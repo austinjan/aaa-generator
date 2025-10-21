@@ -1,75 +1,105 @@
 package main
 
 import (
-	"flag"
+	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 
 	"aaa-generator/internal/template"
+	"github.com/spf13/cobra"
 )
 
+const version = "1.0.0"
+
 func main() {
+	if err := newRootCommand().Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func newRootCommand() *cobra.Command {
 	var (
-		projectName     = flag.String("name", "", "Project name")
-		templateName    = flag.String("template", "basic", "Template name")
-		listTemplates   = flag.Bool("list", false, "List available templates")
-		installTemplate = flag.String("install", "", "Install template from URL or path")
-		interactive     = flag.Bool("interactive", false, "Interactive mode")
-		version         = flag.Bool("version", false, "Show version")
+		projectName   string
+		templateName  string
+		listFlag      bool
+		installTarget string
+		interactive   bool
+		versionFlag   bool
 	)
-	flag.Parse()
 
-	if *version {
-		fmt.Println("Go React Generator v1.0.0")
-		return
+	cmd := &cobra.Command{
+		Use:          "generator",
+		Short:        "Create Go + React applications from templates",
+		Long:         "Go React Generator scaffolds Go backends and React frontends using reusable templates.",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if versionFlag {
+				fmt.Fprintf(cmd.OutOrStdout(), "Go React Generator v%s\n", version)
+				return nil
+			}
+
+			manager, err := template.NewManager()
+			if err != nil {
+				return fmt.Errorf("error initializing template manager: %w", err)
+			}
+
+			if listFlag {
+				listAvailableTemplates(manager)
+				return nil
+			}
+
+			if installTarget != "" {
+				if err := manager.InstallTemplate(installTarget); err != nil {
+					return fmt.Errorf("error installing template: %w", err)
+				}
+				return nil
+			}
+
+			if interactive {
+				if err := checkEnvironment(cmd.OutOrStdout()); err != nil {
+					return err
+				}
+				if err := runInteractiveMode(manager); err != nil {
+					return err
+				}
+				return nil
+			}
+
+			if projectName == "" {
+				return fmt.Errorf("project name is required (use --name or run with --interactive)")
+			}
+
+			if err := checkEnvironment(cmd.OutOrStdout()); err != nil {
+				return err
+			}
+
+			generator := template.NewGenerator(manager)
+			if err := generator.Generate(projectName, templateName); err != nil {
+				return err
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "Project '%s' created successfully using template '%s'!\n", projectName, templateName)
+			showNextSteps(projectName)
+			return nil
+		},
 	}
 
-	manager, err := template.NewManager()
-	if err != nil {
-		fmt.Printf("❌ Error initializing template manager: %v\n", err)
-		os.Exit(1)
-	}
+	templateName = "basic"
 
-	// 列出可用模板
-	if *listTemplates {
-		listAvailableTemplates(manager)
-		return
-	}
+	cmd.Flags().StringVarP(&projectName, "name", "n", "", "Project name for the generated application")
+	cmd.Flags().StringVarP(&templateName, "template", "t", templateName, "Template to use when generating the project")
+	cmd.Flags().BoolVarP(&listFlag, "list", "l", false, "List available templates")
+	cmd.Flags().StringVar(&installTarget, "install", "", "Install template from URL or local path")
+	cmd.Flags().BoolVarP(&interactive, "interactive", "i", false, "Run in interactive mode")
+	cmd.Flags().BoolVar(&versionFlag, "version", false, "Show the generator version")
+	cmd.Flags().SortFlags = false
 
-	// 安裝模板
-	if *installTemplate != "" {
-		if err := manager.InstallTemplate(*installTemplate); err != nil {
-			fmt.Printf("❌ Error installing template: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("✅ Template installed successfully!")
-		return
-	}
-
-	// 交互模式
-	if *interactive {
-		if err := runInteractiveMode(manager); err != nil {
-			fmt.Printf("❌ Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	// 生成項目
-	if *projectName == "" {
-		showUsage()
-		os.Exit(1)
-	}
-
-	generator := template.NewGenerator(manager)
-	if err := generator.Generate(*projectName, *templateName); err != nil {
-		fmt.Printf("❌ Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("🎉 Project '%s' created successfully using template '%s'!\n", *projectName, *templateName)
-	showNextSteps(*projectName)
+	return cmd
 }
 
 func listAvailableTemplates(manager *template.Manager) {
@@ -80,25 +110,26 @@ func listAvailableTemplates(manager *template.Manager) {
 		return
 	}
 
-	fmt.Println("📋 Available Templates:")
+	fmt.Println("Available templates:")
 	fmt.Println()
 
 	for _, tmpl := range templates {
-		fmt.Printf("🔹 %s (%s)\n", tmpl.DisplayName, tmpl.Name)
-		fmt.Printf("   %s\n", tmpl.Description)
-		fmt.Printf("   Version: %s | Source: %s\n", tmpl.Version, tmpl.Source)
+		fmt.Printf("- %s (%s)\n", tmpl.DisplayName, tmpl.Name)
+		fmt.Printf("  %s\n", tmpl.Description)
+		fmt.Printf("  Version: %s | Source: %s\n", tmpl.Version, tmpl.Source)
 		if len(tmpl.Tags) > 0 {
-			fmt.Printf("   Tags: %s\n", strings.Join(tmpl.Tags, ", "))
+			fmt.Printf("  Tags: %s\n", strings.Join(tmpl.Tags, ", "))
 		}
 		fmt.Println()
 	}
 }
 
 func runInteractiveMode(manager *template.Manager) error {
-	fmt.Println("🚀 Welcome to Go React Generator!")
+	fmt.Println("Welcome to Go React Generator!")
 	fmt.Println()
 
-	// 選擇模板
+	reader := bufio.NewReader(os.Stdin)
+
 	templates := manager.ListTemplates()
 	if len(templates) == 0 {
 		return fmt.Errorf("no templates available")
@@ -110,54 +141,90 @@ func runInteractiveMode(manager *template.Manager) error {
 	}
 
 	var choice int
-	fmt.Print("\nSelect template (1-", len(templates), "): ")
-	if _, err := fmt.Scanf("%d", &choice); err != nil || choice < 1 || choice > len(templates) {
-		return fmt.Errorf("invalid template selection")
+	for {
+		fmt.Printf("\nSelect template (1-%d): ", len(templates))
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read input: %w", err)
+		}
+
+		input = strings.TrimSpace(input)
+		if input == "" {
+			fmt.Println("Please enter a number.")
+			continue
+		}
+
+		value, err := strconv.Atoi(input)
+		if err != nil || value < 1 || value > len(templates) {
+			fmt.Println("Invalid selection. Try again.")
+			continue
+		}
+
+		choice = value
+		break
 	}
 
 	selectedTemplate := templates[choice-1]
 
-	// 輸入項目名稱
 	var projectName string
-	fmt.Print("Enter project name: ")
-	if _, err := fmt.Scanf("%s", &projectName); err != nil {
-		return fmt.Errorf("invalid project name")
+	for {
+		fmt.Print("Enter project name: ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("failed to read project name: %w", err)
+		}
+
+		projectName = strings.TrimSpace(input)
+		if projectName == "" {
+			fmt.Println("Project name cannot be empty. Please try again.")
+			continue
+		}
+
+		break
 	}
 
-	// 生成項目
+	if err := checkEnvironment(os.Stdout); err != nil {
+		return err
+	}
+
 	generator := template.NewGenerator(manager)
 	if err := generator.Generate(projectName, selectedTemplate.Name); err != nil {
 		return err
 	}
 
-	fmt.Printf("🎉 Project '%s' created successfully!\n", projectName)
+	fmt.Printf("Project '%s' created successfully!\n", projectName)
 	showNextSteps(projectName)
 	return nil
 }
 
-func showUsage() {
-	fmt.Println("Go React Generator - Create Go + React applications")
-	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  generator -name <project-name> [-template <template-name>]")
-	fmt.Println("  generator -list")
-	fmt.Println("  generator -interactive")
-	fmt.Println("  generator -install <url-or-path>")
-	fmt.Println("  generator -version")
-	fmt.Println()
-	fmt.Println("Examples:")
-	fmt.Println("  generator -name my-app")
-	fmt.Println("  generator -name my-app -template advanced")
-	fmt.Println("  generator -list")
-	fmt.Println("  generator -interactive")
-}
-
 func showNextSteps(projectName string) {
 	fmt.Println()
-	fmt.Println("📚 Next steps:")
+	fmt.Println("Next steps:")
 	fmt.Printf("  cd %s\n", projectName)
 	fmt.Println("  make install    # Install dependencies")
 	fmt.Println("  make dev        # Start development servers")
 	fmt.Println("  make build      # Build for production")
 	fmt.Println()
+}
+
+func checkEnvironment(out io.Writer) error {
+	fmt.Fprintln(out, "Checking environment prerequisites...")
+	if err := ensureTool("go", "Install Go from https://go.dev/dl/", out); err != nil {
+		return err
+	}
+	if err := ensureTool("node", "Install Node.js from https://nodejs.org/", out); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "Environment looks good.")
+	return nil
+}
+
+func ensureTool(name, hint string, out io.Writer) error {
+	fmt.Fprintf(out, " - %s: ", name)
+	if _, err := exec.LookPath(name); err != nil {
+		fmt.Fprintln(out, "missing")
+		return fmt.Errorf("%s executable not found in PATH. %s", name, hint)
+	}
+	fmt.Fprintln(out, "found")
+	return nil
 }

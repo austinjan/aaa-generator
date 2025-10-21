@@ -1,0 +1,103 @@
+# {{.ProjectName}}
+
+This project was generated with **Go React Generator** using the **basic** template. It provides a Go HTTP backend and a React frontend built with Vite.
+
+## Prerequisites
+
+- Go 1.21 or newer
+- Node.js 18 or newer (npm included)
+- Make (optional, recommended for UNIX-like systems)
+
+## Project Structure
+
+- `main.go` – Go backend entry point
+- `frontend/` – React application (Vite)
+- `Makefile` – Common build/test commands for UNIX-like systems
+- `build.bat` – Convenience build script for Windows
+
+## Installation
+
+```sh
+make install
+```
+
+On Windows without `make`, run:
+
+```bat
+build.bat
+```
+
+This installs frontend dependencies (`npm install`) and tidies Go modules (`go mod tidy`).
+
+## Development
+
+1. Start the frontend dev server in one terminal:
+   ```sh
+   cd frontend
+   npm run dev
+   ```
+2. Start the backend dev server in another terminal:
+   ```sh
+   go run ./main.go
+   ```
+
+You can also use `make backend-dev` (and optionally `make frontend-dev`) if `make` is available.
+
+The backend listens on `http://localhost:{{.Port}}` and the frontend on `http://localhost:5173` by default.
+
+## Building for Production
+
+Using `make`:
+
+```sh
+make build
+```
+
+Using Windows batch script:
+
+```bat
+build.bat
+```
+
+Both commands produce:
+
+- Optimised frontend assets in `frontend/dist/`
+- A backend binary named `{{.ProjectName}}`
+
+## Running
+
+After building, start the backend binary:
+
+```sh
+./{{.ProjectName}}
+```
+
+Then serve the frontend `frontend/dist/` directory with your preferred static file server or a hosting provider.
+
+## Testing
+
+```sh
+make test
+```
+
+This runs both Go unit tests and frontend tests (via `npm test`). On Windows, run the commands individually:
+
+```bat
+go test ./...
+cd frontend && npm test
+```
+
+## Docker (Optional)
+
+If you have Docker installed:
+
+```sh
+make docker-build
+make docker-run
+```
+
+This builds and runs a container exposing port `{{.Port}}`.
+
+---
+
+Happy hacking!

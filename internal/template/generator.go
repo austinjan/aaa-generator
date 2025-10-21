@@ -20,36 +20,32 @@ func NewGenerator(manager *Manager) *Generator {
 }
 
 func (g *Generator) Generate(projectName, templateName string) error {
-	// 檢查項目目錄是否已存在
-	if _, err := os.Stat(projectName); !os.IsNotExist(err) {
+	if _, err := os.Stat(projectName); err == nil {
 		return fmt.Errorf("directory '%s' already exists", projectName)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check project directory: %w", err)
 	}
 
-	// 獲取模板
 	tmpl, err := g.manager.GetTemplate(templateName)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("🚀 Creating project '%s' using template '%s'...\n", projectName, tmpl.Config.DisplayName)
+	fmt.Printf("Creating project '%s' using template '%s'...\n", projectName, tmpl.Config.DisplayName)
 
-	// 收集變數
 	vars, err := g.collectVariables(tmpl.Config, projectName)
 	if err != nil {
 		return err
 	}
 
-	// 創建項目目錄
-	if err := os.MkdirAll(projectName, 0755); err != nil {
+	if err := os.MkdirAll(projectName, 0o755); err != nil {
 		return fmt.Errorf("failed to create project directory: %w", err)
 	}
 
-	// 生成文件
 	if err := g.generateFiles(tmpl, projectName, vars); err != nil {
 		return fmt.Errorf("failed to generate files: %w", err)
 	}
 
-	// 執行後處理指令
 	if err := g.runPostCommands(tmpl.Config, projectName, vars); err != nil {
 		return fmt.Errorf("failed to run post commands: %w", err)
 	}
@@ -58,55 +54,35 @@ func (g *Generator) Generate(projectName, templateName string) error {
 }
 
 func (g *Generator) collectVariables(config *TemplateConfig, projectName string) (map[string]interface{}, error) {
-	vars := make(map[string]interface{})
+	vars := map[string]interface{}{
+		"ProjectName": projectName,
+		"ModuleName":  projectName,
+	}
 
-	// 設置基本變數
-	vars["ProjectName"] = projectName
-	vars["ModuleName"] = fmt.Sprintf("github.com/yourname/%s", projectName)
+	if config == nil {
+		return vars, nil
+	}
 
-	// 處理模板定義的變數
+	reader := bufio.NewReader(os.Stdin)
+
 	for _, variable := range config.Variables {
-		// 跳過已設置的變數
 		if _, exists := vars[variable.Name]; exists {
 			continue
 		}
 
-		var value string
-		if variable.Default != "" {
-			value = variable.Default
-		}
+		value := variable.Default
 
-		// 如果變數是必需的且沒有默認值，提示用戶輸入
-		if variable.Required && value == "" {
-			fmt.Printf("Enter %s", variable.Name)
-			if variable.Description != "" {
-				fmt.Printf(" (%s)", variable.Description)
-			}
-			fmt.Print(": ")
-
-			reader := bufio.NewReader(os.Stdin)
-			input, err := reader.ReadString('\n')
+		if variable.Required && strings.TrimSpace(value) == "" {
+			var err error
+			value, err = g.promptForVariable(reader, variable)
 			if err != nil {
 				return nil, err
 			}
-			value = strings.TrimSpace(input)
-
-			if value == "" {
-				return nil, fmt.Errorf("required variable '%s' cannot be empty", variable.Name)
-			}
 		}
 
-		// 對於選擇類型的變數，驗證值
 		if variable.Type == "select" && len(variable.Options) > 0 {
-			validOption := false
-			for _, option := range variable.Options {
-				if value == option {
-					validOption = true
-					break
-				}
-			}
-			if !validOption {
-				return nil, fmt.Errorf("invalid value '%s' for variable '%s'. Valid options: %v", value, variable.Name, variable.Options)
+			if !contains(variable.Options, value) {
+				return nil, fmt.Errorf("invalid value '%s' for variable '%s'. valid options: %v", value, variable.Name, variable.Options)
 			}
 		}
 
@@ -116,37 +92,71 @@ func (g *Generator) collectVariables(config *TemplateConfig, projectName string)
 	return vars, nil
 }
 
+func (g *Generator) promptForVariable(reader *bufio.Reader, variable TemplateVar) (string, error) {
+	for {
+		fmt.Printf("Enter %s", variable.Name)
+		if variable.Description != "" {
+			fmt.Printf(" (%s)", variable.Description)
+		}
+		fmt.Print(": ")
+
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		value := strings.TrimSpace(input)
+		if value == "" {
+			fmt.Println("Value cannot be empty. Please try again.")
+			continue
+		}
+		return value, nil
+	}
+}
+
 func (g *Generator) generateFiles(tmpl *Template, projectName string, vars map[string]interface{}) error {
+	useRules := tmpl.Config != nil && len(tmpl.Config.Files) > 0
+
 	return fs.WalkDir(tmpl.Files, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		// 跳過模板配置文件
+		if path == "." {
+			return nil
+		}
 		if path == "template.yaml" {
 			return nil
 		}
 
-		targetPath := filepath.Join(projectName, path)
+		relativePath := path
+		matched := false
+		if useRules {
+			if mapped, ok := mapTargetPath(tmpl.Config.Files, path); ok {
+				relativePath = mapped
+				matched = true
+			}
+		}
+		if useRules && !matched {
+			return nil
+		}
+
+		relativePath = filepath.FromSlash(relativePath)
+		targetPath := filepath.Join(projectName, relativePath)
 
 		if d.IsDir() {
-			return os.MkdirAll(targetPath, 0755)
+			return os.MkdirAll(targetPath, 0o755)
 		}
 
-		// 讀取文件內容
-		content, err := fs.ReadFile(tmpl.Files, path)
-		if err != nil {
-			return err
+		content, readErr := fs.ReadFile(tmpl.Files, path)
+		if readErr != nil {
+			return readErr
 		}
 
-		// 如果是模板文件，處理模板
 		if strings.HasSuffix(path, ".tmpl") {
 			targetPath = strings.TrimSuffix(targetPath, ".tmpl")
 			return g.processTemplate(content, targetPath, vars)
 		}
 
-		// 直接複製非模板文件
-		return os.WriteFile(targetPath, content, 0644)
+		return os.WriteFile(targetPath, content, 0o644)
 	})
 }
 
@@ -156,8 +166,7 @@ func (g *Generator) processTemplate(content []byte, targetPath string, vars map[
 		return fmt.Errorf("failed to parse template %s: %w", targetPath, err)
 	}
 
-	// 確保目標目錄存在
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return err
 	}
 
@@ -175,16 +184,18 @@ func (g *Generator) processTemplate(content []byte, targetPath string, vars map[
 }
 
 func (g *Generator) runPostCommands(config *TemplateConfig, projectName string, vars map[string]interface{}) error {
-	if len(config.PostGenerate) == 0 {
+	if config == nil || len(config.PostGenerate) == 0 {
 		return nil
 	}
 
-	fmt.Println("📦 Running post-generation commands...")
+	fmt.Println("Running post-generation commands...")
 
 	for _, command := range config.PostGenerate {
-		// 處理命令中的模板變數
 		cmdStr := g.processCommandTemplate(command.Command, vars)
 		workDir := filepath.Join(projectName, command.WorkDir)
+		if workDir == "" {
+			workDir = projectName
+		}
 
 		fmt.Printf("  Running: %s\n", cmdStr)
 
@@ -194,8 +205,7 @@ func (g *Generator) runPostCommands(config *TemplateConfig, projectName string, 
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			fmt.Printf("⚠️  Warning: Command failed: %s\n", cmdStr)
-			// 不返回錯誤，繼續執行其他命令
+			fmt.Printf("  Warning: command failed: %s\n", cmdStr)
 		}
 	}
 
@@ -205,13 +215,89 @@ func (g *Generator) runPostCommands(config *TemplateConfig, projectName string, 
 func (g *Generator) processCommandTemplate(command string, vars map[string]interface{}) string {
 	tmpl, err := template.New("command").Parse(command)
 	if err != nil {
-		return command // 返回原始命令
+		return command
 	}
 
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, vars); err != nil {
-		return command // 返回原始命令
+		return command
 	}
 
 	return buf.String()
+}
+
+func mapTargetPath(rules []FileRule, path string) (string, bool) {
+	normalized := strings.TrimPrefix(path, "./")
+	normalized = strings.TrimPrefix(normalized, "/")
+	if normalized == "" {
+		return "", true
+	}
+
+	for _, rule := range rules {
+		src := strings.TrimSpace(rule.Source)
+		if src == "" {
+			continue
+		}
+		src = strings.TrimPrefix(src, "./")
+		src = strings.TrimPrefix(src, "/")
+
+		ruleType := strings.TrimSpace(rule.Type)
+		if ruleType == "" {
+			ruleType = "directory"
+		}
+
+		switch ruleType {
+		case "directory":
+			src = strings.TrimSuffix(src, "/")
+			if src == "" {
+				return joinRuleTarget(rule.Target, normalized), true
+			}
+			if normalized == src {
+				return joinRuleTarget(rule.Target, ""), true
+			}
+			if strings.HasPrefix(normalized, src+"/") {
+				rel := strings.TrimPrefix(normalized, src+"/")
+				return joinRuleTarget(rule.Target, rel), true
+			}
+		case "file":
+			src = strings.TrimSuffix(src, "/")
+			if normalized == src {
+				rel := strings.TrimSpace(rule.Target)
+				if rel == "" {
+					rel = filepath.Base(src)
+				}
+				rel = strings.TrimPrefix(rel, "./")
+				return rel, true
+			}
+		}
+	}
+
+	return normalized, false
+}
+
+func joinRuleTarget(target, rel string) string {
+	base := strings.TrimSpace(target)
+	base = strings.Trim(base, "/")
+	if base == "." {
+		base = ""
+	}
+
+	if rel == "" {
+		return base
+	}
+
+	if base == "" {
+		return rel
+	}
+
+	return base + "/" + rel
+}
+
+func contains(options []string, value string) bool {
+	for _, option := range options {
+		if option == value {
+			return true
+		}
+	}
+	return false
 }

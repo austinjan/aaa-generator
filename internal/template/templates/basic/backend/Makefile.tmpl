@@ -1,64 +1,78 @@
-.PHONY: dev build clean install run test
+﻿SHELL := /bin/sh
+.DEFAULT_GOAL := help
+BIN := {{.ProjectName}}
+PORT := {{.Port}}
 
-# 開發模式
-dev:
-	@echo "🔄 Starting development servers..."
-	@echo "Frontend will be available at: http://localhost:5173"
-	@echo "Backend will be available at: http://localhost:{{.Port}}"
-	@cd frontend && npm run dev &
-	@sleep 2
-	@go run main.go
+.PHONY: install dev frontend-dev backend-dev build frontend-build backend-build run test fmt vet lint clean docker-build docker-run help
 
-# 安裝依賴
 install:
-	@echo "📦 Installing dependencies..."
-	@cd frontend && npm install
-	@go mod tidy
+	@echo "Installing frontend dependencies..."
+	cd frontend && npm install
+	@echo "Tidying Go modules..."
+	go mod tidy
 
-# 構建生產版本
-build:
-	@echo "🏗️  Building frontend..."
-	@cd frontend && npm run build
-	@echo "🏗️  Building backend..."
-	@go build -ldflags="-s -w" -o {{.ProjectName}} main.go
-	@echo "✅ Build complete! Run ./{{.ProjectName}} to start"
+dev:
+	@echo "Starting frontend dev server in the background..."
+	cd frontend && npm run dev &
+	@echo "Starting backend dev server..."
+	go run ./main.go
 
-# 運行生產版本
+frontend-dev:
+	cd frontend && npm run dev
+
+backend-dev:
+	go run ./main.go
+
+build: frontend-build backend-build
+	@echo "Build complete. Run ./$(BIN) to start the backend."
+
+frontend-build:
+	@echo "Building frontend bundle..."
+	cd frontend && npm run build
+
+backend-build:
+	@echo "Building backend binary..."
+	go build -trimpath -ldflags="-s -w" -o $(BIN) ./main.go
+
 run: build
-	@echo "🚀 Starting {{.ProjectName}}..."
-	@./{{.ProjectName}}
+	@echo "Starting $(BIN)..."
+	./$(BIN)
 
-# 測試
 test:
-	@echo "🧪 Running tests..."
-	@go test ./...
-	@cd frontend && npm test
+	@echo "Running Go tests..."
+	go test ./...
+	@echo "Running frontend tests..."
+	cd frontend && npm test
 
-# 清理
+fmt:
+	go fmt ./...
+
+vet:
+	go vet ./...
+
+lint: fmt vet
+
 clean:
-	@echo "🧹 Cleaning..."
-	@rm -rf frontend/dist
-	@rm -f {{.ProjectName}}
-	@echo "✅ Clean complete!"
+	@echo "Removing build artifacts..."
+	rm -rf frontend/dist
+	rm -f $(BIN)
 
-# Docker 構建
 docker-build:
-	@echo "🐳 Building Docker image..."
-	@docker build -t {{.ProjectName}}:latest .
+	docker build -t $(BIN):latest .
 
-# Docker 運行
 docker-run:
-	@echo "🐳 Running Docker container..."
-	@docker run -p {{.Port}}:{{.Port}} {{.ProjectName}}:latest
+	docker run -p $(PORT):$(PORT) $(BIN):latest
 
-# 顯示幫助
 help:
-	@echo "{{.ProjectName}} - Available commands:"
-	@echo "  make install     - Install dependencies"
-	@echo "  make dev         - Start development servers"
-	@echo "  make build       - Build for production"
-	@echo "  make run         - Run production build"
-	@echo "  make test        - Run tests"
-	@echo "  make clean       - Clean build artifacts"
-	@echo "  make docker-build - Build Docker image"
-	@echo "  make docker-run  - Run Docker container"
+	@echo "Available targets:"
+	@echo "  make install        Install dependencies"
+	@echo "  make frontend-dev   Run the frontend dev server"
+	@echo "  make backend-dev    Run the backend dev server"
+	@echo "  make dev            Run frontend (background) and backend dev servers"
+	@echo "  make build          Build frontend assets and backend binary"
+	@echo "  make run            Build and run the backend binary"
+	@echo "  make test           Run Go and frontend tests"
+	@echo "  make fmt|vet|lint   Run Go format and static analysis commands"
+	@echo "  make clean          Remove build artifacts"
+	@echo "  make docker-build   Build a Docker image"
+	@echo "  make docker-run     Run the Docker image"
