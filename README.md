@@ -1,9 +1,6 @@
 # AAA-Generator
 
-[![Build and Test](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/build.yml)
-[![Release](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/release.yml/badge.svg)](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/release.yml)
-
-Application Template Generator - A CLI tool for scaffolding Go + React projects from reusable templates.
+A application template generator for quickly scaffolding new projects with customizable templates.
 
 ## Features
 

@@ -1,4 +1,4 @@
-.PHONY: all build run install test fmt vet lint clean build-all build-linux build-darwin build-windows help
+.PHONY: all build run install test fmt vet lint clean deps build-all build-linux build-darwin build-windows help
 
 # Basic build settings for the generator CLI.
 GO       ?= go
@@ -14,9 +14,14 @@ LDFLAGS  := -ldflags "-X main.version=$(VERSION)"
 
 all: build
 
-build:
+build: deps
 	@echo "Building $(BIN) version $(VERSION)..."
 	@$(GO) build -trimpath $(LDFLAGS) -o $(BIN) $(CMD_PKG)
+
+deps:
+	@echo "Downloading and tidying dependencies..."
+	@$(GO) mod download
+	@$(GO) mod tidy
 
 run:
 	@echo "Running $(BIN) with ARGS='$(ARGS)'..."
@@ -42,7 +47,7 @@ clean:
 	@$(RM) -f $(BIN) $(BIN).exe
 	@$(RM) -rf dist/
 
-build-all: build-linux build-darwin build-windows
+build-all: deps build-linux build-darwin build-windows
 	@echo "✅ All platform binaries built in dist/"
 
 build-linux:
@@ -68,6 +73,7 @@ build-windows:
 help:
 	@echo "Available targets:"
 	@echo "  make build         - Compile the generator binary for current platform"
+	@echo "  make deps          - Download and tidy Go module dependencies"
 	@echo "  make build-all     - Build binaries for all platforms (Linux, macOS, Windows)"
 	@echo "  make build-linux   - Build for Linux (amd64)"
 	@echo "  make build-darwin  - Build for macOS (amd64 + arm64)"
