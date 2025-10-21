@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build all platforms
+      run: make build-all
+
+    - name: Create release archives
+      run: |
+        cd dist
+        tar -czf generator-linux-amd64.tar.gz generator-linux-amd64
+        tar -czf generator-darwin-amd64.tar.gz generator-darwin-amd64
+        tar -czf generator-darwin-arm64.tar.gz generator-darwin-arm64
+        zip generator-windows-amd64.zip generator-windows-amd64.exe
+        cd ..
+
+    - name: Generate checksums
+      run: |
+        cd dist
+        sha256sum *.tar.gz *.zip > checksums.txt
+        cat checksums.txt
+        cd ..
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          dist/*.tar.gz
+          dist/*.zip
+          dist/checksums.txt
+        body: |
+          ## AAA-Generator ${{ steps.get_version.outputs.VERSION }}
+
+          Application Template Generator - Create Go + React projects from templates.
+
+          ### 📦 Downloads
+
+          Choose the appropriate binary for your platform:
+
+          - **Linux (x64)**: `generator-linux-amd64.tar.gz`
+          - **macOS (Intel)**: `generator-darwin-amd64.tar.gz`
+          - **macOS (Apple Silicon)**: `generator-darwin-arm64.tar.gz`
+          - **Windows (x64)**: `generator-windows-amd64.zip`
+
+          ### 🔐 Verification
+
+          Verify downloads using `checksums.txt`:
+          ```bash
+          sha256sum -c checksums.txt
+          ```
+
+          ### 📝 Installation
+
+          **Linux/macOS:**
+          ```bash
+          tar -xzf generator-*.tar.gz
+          chmod +x generator-*
+          sudo mv generator-* /usr/local/bin/generator
+          ```
+
+          **Windows:**
+          Extract the zip file and add the directory to your PATH.
+
+          ### ✨ Usage
+
+          ```bash
+          generator --interactive
+          generator --name myproject --template basic
+          generator --list
+          ```
+
+          See [README.md](https://github.com/${{ github.repository }}/blob/main/README.md) for full documentation.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

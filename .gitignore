@@ -32,5 +32,9 @@ pnpm-debug.log*
 Thumbs.db
 
 go.sum
+
 # test folder
 /test/
+
+# Cross-platform build artifacts
+dist/
