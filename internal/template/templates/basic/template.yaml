@@ -29,6 +29,9 @@ files:
   - source: "GEMINI.md.tmpl"
     target: "GEMINI.md"
     type: "file"
+  - source: "backend/.gitignore.tmpl"
+    target: ".gitignore"
+    type: "file"
 
 postGenerate:
   - command: "git init"
