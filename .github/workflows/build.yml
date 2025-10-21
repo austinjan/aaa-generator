@@ -1,0 +1,128 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop, start-project ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        go-version: ['1.24']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for git describe
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Display Go version
+      run: go version
+
+    - name: Cache Go modules
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run go fmt
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "Code is not formatted. Please run 'go fmt ./...'"
+          gofmt -s -l .
+          exit 1
+        fi
+      shell: bash
+      if: runner.os != 'Windows'
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+    - name: Build binary (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        make build
+        ./generator --version
+
+    - name: Build binary (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        go build -trimpath -ldflags "-X main.version=test-${{ github.sha }}" -o generator.exe ./cmd/generator
+        ./generator.exe --version
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      if: runner.os == 'Linux'
+      with:
+        file: ./coverage.txt
+        flags: unittests
+        name: codecov-${{ matrix.os }}
+      continue-on-error: true
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: generator-${{ runner.os }}
+        path: |
+          generator
+          generator.exe
+        retention-days: 7
+        if-no-files-found: ignore
+
+  build-all-platforms:
+    name: Cross-platform build test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Build all platforms
+      run: make build-all
+
+    - name: Verify all binaries exist
+      run: |
+        ls -lh dist/
+        test -f dist/generator-linux-amd64
+        test -f dist/generator-darwin-amd64
+        test -f dist/generator-darwin-arm64
+        test -f dist/generator-windows-amd64.exe
+        echo "✅ All platform binaries built successfully"
+
+    - name: Upload cross-platform artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: generator-all-platforms
+        path: dist/*
+        retention-days: 7

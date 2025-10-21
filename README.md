@@ -1,5 +1,8 @@
 # AAA-Generator
 
+[![Build and Test](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/build.yml/badge.svg)](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/build.yml)
+[![Release](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/release.yml/badge.svg)](https://github.com/YOUR_USERNAME/aaa-generator/actions/workflows/release.yml)
+
 Application Template Generator - A CLI tool for scaffolding Go + React projects from reusable templates.
 
 ## Features
@@ -55,13 +58,39 @@ make install
 ## Available Commands
 
 ```bash
-make build      # Build the generator binary
-make install    # Install to $GOBIN
-make run        # Run with arguments: make run ARGS="--help"
-make test       # Run tests
-make fmt        # Format code
-make vet        # Run go vet
-make clean      # Clean build artifacts
+make build         # Build the generator binary for current platform
+make build-all     # Build binaries for all platforms (Linux, macOS, Windows)
+make build-linux   # Build for Linux (amd64)
+make build-darwin  # Build for macOS (amd64 + arm64)
+make build-windows # Build for Windows (amd64)
+make install       # Install to $GOBIN
+make run           # Run with arguments: make run ARGS="--help"
+make test          # Run tests
+make fmt           # Format code
+make vet           # Run go vet
+make clean         # Clean build artifacts
+```
+
+### Cross-Platform Builds
+
+Build binaries for all platforms at once:
+
+```bash
+make build-all
+```
+
+This creates binaries in the `dist/` directory:
+- `generator-linux-amd64` - Linux 64-bit
+- `generator-darwin-amd64` - macOS Intel
+- `generator-darwin-arm64` - macOS Apple Silicon (M1/M2)
+- `generator-windows-amd64.exe` - Windows 64-bit
+
+Or build for specific platforms:
+
+```bash
+make build-linux    # Linux only
+make build-darwin   # macOS only (both Intel and ARM)
+make build-windows  # Windows only
 ```
 
 ## Version Management
@@ -70,12 +99,29 @@ The generator uses git tags for versioning. The version is automatically injecte
 
 ### Creating a New Version
 
+**Automated Release (Recommended):**
+
 ```bash
-# Create and push a new version tag
+# 1. Commit your changes
+git add .
+git commit -m "feat: new feature"
+
+# 2. Create and push a version tag
 git tag v1.0.0
+git push origin main
 git push origin v1.0.0
 
-# Build with the new version
+# 3. GitHub Actions will automatically:
+#    - Build binaries for all platforms
+#    - Create release archives (.tar.gz, .zip)
+#    - Generate checksums
+#    - Create a GitHub Release with all artifacts
+```
+
+**Manual Local Build:**
+
+```bash
+# Build with the new version locally
 make build
 
 # Verify version
