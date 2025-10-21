@@ -31,24 +31,28 @@ func (g *Generator) Generate(projectName, templateName string) error {
 		return err
 	}
 
-	fmt.Printf("Creating project '%s' using template '%s'...\n", projectName, tmpl.Config.DisplayName)
-
 	vars, err := g.collectVariables(tmpl.Config, projectName)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("🔄 Creating project directory...")
 	if err := os.MkdirAll(projectName, 0o755); err != nil {
 		return fmt.Errorf("failed to create project directory: %w", err)
 	}
+	fmt.Println("✅ Project directory created")
 
+	fmt.Println("🔄 Generating project files...")
 	if err := g.generateFiles(tmpl, projectName, vars); err != nil {
 		return fmt.Errorf("failed to generate files: %w", err)
 	}
+	fmt.Println("✅ Project files generated")
 
+	fmt.Println("🔄 Running post-generation commands...")
 	if err := g.runPostCommands(tmpl.Config, projectName, vars); err != nil {
 		return fmt.Errorf("failed to run post commands: %w", err)
 	}
+	fmt.Println("✅ Post-generation commands completed")
 
 	return nil
 }
@@ -188,8 +192,6 @@ func (g *Generator) runPostCommands(config *TemplateConfig, projectName string, 
 		return nil
 	}
 
-	fmt.Println("Running post-generation commands...")
-
 	for _, command := range config.PostGenerate {
 		cmdStr := g.processCommandTemplate(command.Command, vars)
 		workDir := filepath.Join(projectName, command.WorkDir)
@@ -197,7 +199,7 @@ func (g *Generator) runPostCommands(config *TemplateConfig, projectName string, 
 			workDir = projectName
 		}
 
-		fmt.Printf("  Running: %s\n", cmdStr)
+		fmt.Printf("   • Running: %s\n", cmdStr)
 
 		cmd := exec.Command("sh", "-c", cmdStr)
 		cmd.Dir = workDir
@@ -205,7 +207,7 @@ func (g *Generator) runPostCommands(config *TemplateConfig, projectName string, 
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			fmt.Printf("  Warning: command failed: %s\n", cmdStr)
+			fmt.Printf("   ⚠️  Warning: command failed: %s\n", cmdStr)
 		}
 	}
 

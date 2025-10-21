@@ -6,19 +6,25 @@ CMD_PKG  := ./cmd/generator
 BIN      ?= generator
 ARGS     ?=
 
+# Version from git tag or commit
+GIT_TAG  := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+VERSION  := $(GIT_TAG)-$(GIT_COMMIT)
+LDFLAGS  := -ldflags "-X main.version=$(VERSION)"
+
 all: build
 
 build:
-	@echo "Building $(BIN)..."
-	@$(GO) build -trimpath -o $(BIN) $(CMD_PKG)
+	@echo "Building $(BIN) version $(VERSION)..."
+	@$(GO) build -trimpath $(LDFLAGS) -o $(BIN) $(CMD_PKG)
 
 run:
 	@echo "Running $(BIN) with ARGS='$(ARGS)'..."
 	@$(GO) run $(CMD_PKG) $(ARGS)
 
 install:
-	@echo "Installing $(CMD_PKG) into $$GOBIN (or $$GOPATH/bin)..."
-	@$(GO) install $(CMD_PKG)
+	@echo "Installing $(CMD_PKG) version $(VERSION) into $$GOBIN (or $$GOPATH/bin)..."
+	@$(GO) install $(LDFLAGS) $(CMD_PKG)
 
 test:
 	@$(GO) test ./...

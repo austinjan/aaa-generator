@@ -1,16 +1,31 @@
-package main
+﻿package main
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
+	"time"
 )
 
 //go:embed dist/*
 var staticFiles embed.FS
+
+type healthResponse struct {
+	Status  string `json:"status"`
+	Service string `json:"service"`
+	Version string `json:"version"`
+}
+
+type helloResponse struct {
+	Message   string    `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+}
 
 func main() {
 	port := os.Getenv("PORT")
@@ -18,64 +33,95 @@ func main() {
 		port = "{{.Port}}"
 	}
 
-	// API 路由
 	http.HandleFunc("/api/health", healthHandler)
 	http.HandleFunc("/api/hello", helloHandler)
 
-	// 靜態文件服務
 	distFS, err := fs.Sub(staticFiles, "dist")
 	if err != nil {
-		log.Fatal("Failed to create sub filesystem:", err)
+		log.Fatalf("failed to create sub filesystem: %v", err)
 	}
 
-	// 設置靜態文件服務器
-	fileServer := http.FileServer(http.FS(distFS))
-	http.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 如果請求的是 API 路由，不處理
-		if r.URL.Path == "/" || r.URL.Path == "/static/" {
-			fileServer.ServeHTTP(w, r)
-			return
-		}
-		
-		// SPA 路由處理 - 所有非 API 請求都返回 index.html
-		if !isStaticFile(r.URL.Path) && !isAPIRoute(r.URL.Path) {
-			r.URL.Path = "/"
-		}
-		fileServer.ServeHTTP(w, r)
-	}))
+	http.Handle("/", spaHandler(distFS))
 
-	fmt.Printf("🚀 {{.ProjectName}} server starting on http://localhost:%s\n", port)
-	fmt.Println("📱 Frontend: http://localhost:" + port)
-	fmt.Println("🔗 API Health: http://localhost:" + port + "/api/health")
-	
+	fmt.Printf("{{.ProjectName}} server starting on http://localhost:%s\n", port)
+	fmt.Println("Frontend: http://localhost:" + port)
+	fmt.Println("API Health: http://localhost:" + port + "/api/health")
+
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status": "healthy", "service": "{{.ProjectName}}", "version": "1.0.0"}`))
+func spaHandler(dist fs.FS) http.Handler {
+	fileServer := http.FileServer(http.FS(dist))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isAPIRoute(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+
+		requestPath := strings.TrimPrefix(r.URL.Path, "/")
+		if requestPath == "" {
+			requestPath = "index.html"
+		}
+
+		if fileExists(dist, requestPath) && isStaticFile(requestPath) {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		serveIndex(dist, w, r)
+	})
 }
 
-func helloHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "Hello from {{.ProjectName}}!", "timestamp": "` + 
-		fmt.Sprintf("%d", System.currentTimeMillis()) + `"}`))
+func serveIndex(dist fs.FS, w http.ResponseWriter, r *http.Request) {
+	content, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		http.Error(w, "index file not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(content)
 }
 
 func isStaticFile(path string) bool {
-	staticExtensions := []string{".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot"}
-	for _, ext := range staticExtensions {
-		if strings.HasSuffix(path, ext) {
-			return true
-		}
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot", ".txt", ".map":
+		return true
+	default:
+		return false
 	}
-	return false
+}
+
+func fileExists(dist fs.FS, path string) bool {
+	_, err := fs.Stat(dist, path)
+	return err == nil
 }
 
 func isAPIRoute(path string) bool {
 	return strings.HasPrefix(path, "/api/")
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, healthResponse{
+		Status:  "healthy",
+		Service: "{{.ProjectName}}",
+		Version: "1.0.0",
+	})
+}
+
+func helloHandler(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, helloResponse{
+		Message:   "Hello from {{.ProjectName}}!",
+		Timestamp: time.Now().UTC(),
+	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.WriteHeader(status)
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Printf("failed to write JSON response: %v", err)
+	}
 }

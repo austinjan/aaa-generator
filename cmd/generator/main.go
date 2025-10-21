@@ -13,13 +13,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "1.0.0"
+var version = "dev" // Set via ldflags during build
 
 func main() {
 	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func printWelcomeBanner() {
+	fmt.Println("╭─────────────────────────────────────────────────────────╮")
+	fmt.Printf("│              AAA-Generator v%-8s                    │\n", version)
+	fmt.Println("│            Application Template Generator               │")
+	fmt.Println("╰─────────────────────────────────────────────────────────╯")
+	fmt.Println()
 }
 
 func newRootCommand() *cobra.Command {
@@ -39,7 +47,7 @@ func newRootCommand() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if versionFlag {
-				fmt.Fprintf(cmd.OutOrStdout(), "Go React Generator v%s\n", version)
+				printWelcomeBanner()
 				return nil
 			}
 
@@ -54,9 +62,14 @@ func newRootCommand() *cobra.Command {
 			}
 
 			if installTarget != "" {
+				fmt.Println()
+				fmt.Printf("📦 Installing template from: %s\n", installTarget)
+				fmt.Println("───────────────────────────────────────────────────────")
 				if err := manager.InstallTemplate(installTarget); err != nil {
 					return fmt.Errorf("error installing template: %w", err)
 				}
+				fmt.Println("✅ Template installed successfully!")
+				fmt.Println()
 				return nil
 			}
 
@@ -78,12 +91,15 @@ func newRootCommand() *cobra.Command {
 				return err
 			}
 
+			fmt.Println()
+			fmt.Printf("🚀 Creating project '%s' using template '%s'\n", projectName, templateName)
+			fmt.Println("───────────────────────────────────────────────────────")
+
 			generator := template.NewGenerator(manager)
 			if err := generator.Generate(projectName, templateName); err != nil {
 				return err
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "Project '%s' created successfully using template '%s'!\n", projectName, templateName)
 			showNextSteps(projectName)
 			return nil
 		},
@@ -106,27 +122,29 @@ func listAvailableTemplates(manager *template.Manager) {
 	templates := manager.ListTemplates()
 
 	if len(templates) == 0 {
-		fmt.Println("No templates available.")
+		fmt.Println("❌ No templates available.")
 		return
 	}
 
-	fmt.Println("Available templates:")
-	fmt.Println()
+	printWelcomeBanner()
+	fmt.Println("📋 Available templates:")
+	fmt.Println("───────────────────────────────────────────────────────")
 
 	for _, tmpl := range templates {
-		fmt.Printf("- %s (%s)\n", tmpl.DisplayName, tmpl.Name)
-		fmt.Printf("  %s\n", tmpl.Description)
-		fmt.Printf("  Version: %s | Source: %s\n", tmpl.Version, tmpl.Source)
+		fmt.Printf("📦 %s (%s)\n", tmpl.DisplayName, tmpl.Name)
+		fmt.Printf("   %s\n", tmpl.Description)
+		fmt.Printf("   Version: %s | Source: %s\n", tmpl.Version, tmpl.Source)
 		if len(tmpl.Tags) > 0 {
-			fmt.Printf("  Tags: %s\n", strings.Join(tmpl.Tags, ", "))
+			fmt.Printf("   🏷️  %s\n", strings.Join(tmpl.Tags, ", "))
 		}
 		fmt.Println()
 	}
+	fmt.Println("───────────────────────────────────────────────────────")
+	fmt.Println()
 }
 
 func runInteractiveMode(manager *template.Manager) error {
-	fmt.Println("Welcome to Go React Generator!")
-	fmt.Println()
+	printWelcomeBanner()
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -192,39 +210,43 @@ func runInteractiveMode(manager *template.Manager) error {
 		return err
 	}
 
-	fmt.Printf("Project '%s' created successfully!\n", projectName)
 	showNextSteps(projectName)
 	return nil
 }
 
 func showNextSteps(projectName string) {
 	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Printf("  cd %s\n", projectName)
-	fmt.Println("  make install    # Install dependencies")
-	fmt.Println("  make dev        # Start development servers")
-	fmt.Println("  make build      # Build for production")
+	fmt.Println("✨ Project created successfully!")
+	fmt.Println()
+	fmt.Println("📝 Next steps:")
+	fmt.Printf("   cd %s\n", projectName)
+	fmt.Println("   make install    # Install dependencies")
+	fmt.Println("   make dev        # Start development servers")
+	fmt.Println("   make build      # Build for production")
+	fmt.Println("───────────────────────────────────────────────────────")
+	fmt.Println("✨ Ready! Happy coding!")
 	fmt.Println()
 }
 
 func checkEnvironment(out io.Writer) error {
-	fmt.Fprintln(out, "Checking environment prerequisites...")
+	fmt.Fprintln(out, "🔄 Checking environment prerequisites...")
 	if err := ensureTool("go", "Install Go from https://go.dev/dl/", out); err != nil {
 		return err
 	}
 	if err := ensureTool("node", "Install Node.js from https://nodejs.org/", out); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "Environment looks good.")
+	fmt.Fprintln(out, "✅ Environment ready")
+	fmt.Fprintln(out, "───────────────────────────────────────────────────────")
 	return nil
 }
 
 func ensureTool(name, hint string, out io.Writer) error {
-	fmt.Fprintf(out, " - %s: ", name)
+	fmt.Fprintf(out, "   • %s: ", name)
 	if _, err := exec.LookPath(name); err != nil {
-		fmt.Fprintln(out, "missing")
+		fmt.Fprintln(out, "❌ missing")
 		return fmt.Errorf("%s executable not found in PATH. %s", name, hint)
 	}
-	fmt.Fprintln(out, "found")
+	fmt.Fprintln(out, "✅")
 	return nil
 }
